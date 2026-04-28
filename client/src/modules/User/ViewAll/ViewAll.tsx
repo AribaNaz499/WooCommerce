@@ -192,20 +192,15 @@ const ViewAllCard = () => {
     name: VIEW_ALL,
   });
 
-  // ✅ FIX 4: refetchOnMount: "always" — ye asal root cause fix hai.
-  // Pehle refetchOnMount: true tha jo React Query mein sirf tab refetch karta hai
-  // jab data stale ho. Lekin Safari mein window.location.replace() ke baad
-  // component remount hota hai aur React Query cached (empty) data serve karta tha
-  // bina network fetch ke — isliye 4 min tak "loading" aur phir "not found" aata tha.
-  // "always" guarantee karta hai ke har mount pe fresh network fetch ho.
+  // ✅ FIX: staleTime: 0 ensures data always re-fetches after login/invalidation.
+  // gcTime keeps data in memory between navigations but allows re-fetch when invalidated.
   const queryOptions = {
     staleTime: 0,
     gcTime: 1000 * 60 * 5,
-    retry: 2,
-    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 8000),
+    retry: 1,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    refetchOnMount: "always" as const,
+    refetchOnMount: true,
   } as const;
 
   const fetchTemplatesForViewAll = async (): Promise<TemplateItem[]> => {
@@ -352,33 +347,16 @@ const ViewAllCard = () => {
     }
   }, [routeCategoryName, routeCategoryId, allCategories, activeTab.name]);
 
-  // ✅ FIX 5: Safari BFCache useEffect — refetchType: "all" use karo "active" ki jagah.
-  // "active" sirf un queries ko refetch karta hai jo abhi mount hain —
-  // lekin BFCache restore ke waqt queries abhi "active" nahi hoti.
-  // "all" guarantee karta hai ke wo bhi re-fetch hon jo abhi mount ho rahi hain.
+  // ✅ Safari BFCache fix - now handled centrally in AuthContext,
+  // but keep a local fallback here for the ViewAll page specifically
   useEffect(() => {
     if (!isSafari) return;
     const handlePageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
-        console.log("[ViewAll Safari] BFCache restore - force refetching");
+        console.log("[ViewAll Safari] BFCache restore - invalidating queries");
         queryClient.removeQueries({ queryKey: ["cards"] });
         queryClient.removeQueries({ queryKey: ["templates"] });
         queryClient.removeQueries({ queryKey: ["categories"] });
-        queryClient.removeQueries({
-          predicate: (q) => q.queryKey[0] === "templates",
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["cards"],
-          refetchType: "all",
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["templates"],
-          refetchType: "all",
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["categories"],
-          refetchType: "all",
-        });
       }
     };
     window.addEventListener("pageshow", handlePageShow);
