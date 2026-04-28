@@ -236,6 +236,26 @@ const ViewAllCard = () => {
     return merged.map(({ __type, ...item }) => item as TemplateItem);
   };
 
+  const getCachedTemplatesFallback = (): TemplateItem[] => {
+    const cached = queryClient.getQueryData<TemplateItem[]>(["templates"]) ?? [];
+    if (!cached.length) return [];
+
+    if (!viewingSpecificNonCardCategory) return cached;
+
+    return cached.filter((item) => {
+      const itemCat = getItemCategory(item);
+      const itemSubCat = getItemSubCategory(item);
+      const matchesMainCategory =
+        matchesCategoryLike(itemCat, routeCategoryName) ||
+        matchesCategoryLike(itemSubCat, routeCategoryName);
+
+      if (!matchesMainCategory) return false;
+      if (routeSubCategory && norm(itemSubCat) !== norm(routeSubCategory)) return false;
+      if (routeSubSubCategory && norm(getItemSubSubCategory(item)) !== norm(routeSubSubCategory)) return false;
+      return true;
+    });
+  };
+
   const { data: categories = [], isLoading: catLoading } = useQuery({
     queryKey: ["categories"],
     queryFn: fetchAllCategoryNamesFromDB,
@@ -252,6 +272,7 @@ const ViewAllCard = () => {
     queryKey: viewingSpecificNonCardCategory
       ? ["templates", "view-all", routeCategoryName, routeSubCategory, routeSubSubCategory]
       : ["templates"],
+    placeholderData: () => getCachedTemplatesFallback(),
     queryFn: () =>
       viewingSpecificNonCardCategory
         ? fetchTempletDesignsByCategory({
