@@ -256,19 +256,24 @@ const ViewAllCard = () => {
     });
   };
 
-  const { data: categories = [], isLoading: catLoading } = useQuery({
+  const { data: categories = [], isLoading: catLoading, isError: categoriesError, error: categoriesQueryError } = useQuery({
     queryKey: ["categories"],
     queryFn: fetchAllCategoryNamesFromDB,
     ...queryOptions,
   });
 
-  const { data: cards = [], isLoading: cardsLoading } = useQuery({
+  const { data: cards = [], isLoading: cardsLoading, isError: cardsError, error: cardsQueryError } = useQuery({
     queryKey: ["cards"],
     queryFn: fetchAllCardsCatalog,
     ...queryOptions,
   });
 
-  const { data: templates = [], isLoading: templatesLoading } = useQuery({
+  const {
+    data: templates = [],
+    isLoading: templatesLoading,
+    isError: templatesError,
+    error: templatesQueryError,
+  } = useQuery({
     queryKey: viewingSpecificNonCardCategory
       ? ["templates", "view-all", routeCategoryName, routeSubCategory, routeSubSubCategory]
       : ["templates"],
@@ -418,6 +423,9 @@ const ViewAllCard = () => {
   const countLabel = productsPending ? "..." : String(filteredItems.length);
   const filteredCardCount = filteredItems.filter((item) => item.__type === "card").length;
   const filteredTemplateCount = filteredItems.filter((item) => item.__type === "templet").length;
+  const categoriesErrorText = categoriesQueryError instanceof Error ? categoriesQueryError.message : "";
+  const cardsErrorText = cardsQueryError instanceof Error ? cardsQueryError.message : "";
+  const templatesErrorText = templatesQueryError instanceof Error ? templatesQueryError.message : "";
 
   useEffect(() => {
     logTiming("ViewAll.queryState", {
@@ -519,6 +527,9 @@ const ViewAllCard = () => {
               mt: 2, mb: 1, p: 1.5, borderRadius: 2,
               background: "#0f172a", color: "#e2e8f0",
               fontFamily: "monospace", fontSize: 12, lineHeight: 1.5,
+              position: "sticky",
+              top: 6,
+              zIndex: 20,
             }}
           >
             <Typography sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#93c5fd", mb: 0.5 }}>
@@ -530,11 +541,24 @@ const ViewAllCard = () => {
             <Box>activeTab: {activeTab.name}</Box>
             <Box>queryMode: {viewingSpecificNonCardCategory ? "templates-filtered" : "full-catalog"}</Box>
             <Box>cardsLoading: {String(cardsLoading)} | templatesLoading: {String(templatesLoading)}</Box>
+            <Box>categoriesLoading: {String(catLoading)}</Box>
             <Box>cardsCount: {cards.length} | templatesCount: {templates.length}</Box>
             <Box>filteredCount: {filteredItems.length}</Box>
             <Box>filteredCards: {filteredCardCount} | filteredTemplates: {filteredTemplateCount}</Box>
             <Box>productsPending: {String(productsPending)}</Box>
             <Box>signedIn: {String(Boolean(user))}</Box>
+            <Box>categoriesError: {String(categoriesError)}</Box>
+            <Box>cardsError: {String(cardsError)}</Box>
+            <Box>templatesError: {String(templatesError)}</Box>
+            <Box sx={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+              categoriesMsg: {categoriesErrorText || "(none)"}
+            </Box>
+            <Box sx={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+              cardsMsg: {cardsErrorText || "(none)"}
+            </Box>
+            <Box sx={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+              templatesMsg: {templatesErrorText || "(none)"}
+            </Box>
           </Box>
         )}
 
