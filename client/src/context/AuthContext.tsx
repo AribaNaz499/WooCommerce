@@ -27,42 +27,26 @@ export const setAuthQueryClient = (qc: QueryClient) => {
   _queryClient = qc;
 };
 
-// ✅ FIX: Use 'active' refetchType so queries actually re-fetch immediately,
-// not just get marked stale. This fixes the "data missing after sign-in" bug
-// on Vercel where staleTime kept preventing re-fetches.
+// ✅ FIX 1: invalidateCatalogQueries — Safari/non-Safari branches hata diye.
+// Pehle isSafariBrowser() check tha jisme Safari ke liye sirf refetchType:"active"
+// use hota tha — lekin window.location.replace() ke baad koi "active" query hoti
+// hi nahi thi, isliye invalidation silently fail hoti thi.
+// Ab dono browsers ke liye removeQueries pehle, phir invalidate — guaranteed fresh fetch.
 const invalidateCatalogQueries = () => {
   if (!_queryClient) {
     console.warn("[AuthContext] queryClient not registered - call setAuthQueryClient() in App.tsx");
     return;
   }
 
-  const isSafariRefresh =
-    typeof window !== "undefined" && isSafariBrowser();
-
-  if (!isSafariRefresh) {
-    // Non-Safari: force next reads to go fully fresh.
-    clearCatalogCaches();
-  }
-
   console.log("[AuthContext] Invalidating + refetching catalog queries after auth change");
 
-  if (isSafariRefresh) {
-    // Safari: keep current catalog visible, refresh in background.
-    _queryClient.invalidateQueries({ queryKey: ["cards"], refetchType: "active" });
-    _queryClient.invalidateQueries({ queryKey: ["categories"], refetchType: "active" });
-    _queryClient.invalidateQueries({ queryKey: ["navCategories"], refetchType: "active" });
-    _queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "templates", refetchType: "active" });
-    return;
-  }
-
-  // Other browsers: remove cached query data entirely, forcing fresh fetch on next access
   _queryClient.removeQueries({ queryKey: ["cards"] });
   _queryClient.removeQueries({ queryKey: ["templates"] });
   _queryClient.removeQueries({ queryKey: ["categories"] });
   _queryClient.removeQueries({ queryKey: ["navCategories"] });
-
-  // Also invalidate any filtered template queries
-  _queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "templates" });
+  _queryClient.removeQueries({
+    predicate: (q) => q.queryKey[0] === "templates",
+  });
 };
 
 interface SignUpInput {
@@ -293,6 +277,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let alive = true;
 
+    // ✅ FIX 2: restoreSession — removeQueries explicitly pehle karo session restore pe.
+    // Pehle sirf invalidateCatalogQueries() tha jo Safari mein silently fail hota tha
+    // kyunki window.location.replace() ke baad queries "active" nahi hoti thi.
+    // Ab removeQueries guarantee karta hai ke ViewAllCard ko koi stale/empty cache
+    // nahi milega aur wo fresh network fetch karega.
     const restoreSession = async () => {
       try {
         await completeAuthCallbackFromUrl();
@@ -306,7 +295,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (data.session?.user?.id) {
           void syncUserData(data.session.user);
-          // ✅ Always invalidate on session restore so data is fresh
+          // ✅ removeQueries first, then invalidate
+          if (_queryClient) {
+            _queryClient.removeQueries({ queryKey: ["cards"] });
+            _queryClient.removeQueries({ queryKey: ["templates"] });
+            _queryClient.removeQueries({ queryKey: ["categories"] });
+            _queryClient.removeQueries({ queryKey: ["navCategories"] });
+            _queryClient.removeQueries({
+              predicate: (q) => q.queryKey[0] === "templates",
+            });
+          }
           invalidateCatalogQueries();
         } else {
           setProfile(null);
@@ -320,6 +318,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     restoreSession();
 
+    // ✅ FIX 3: onAuthStateChange — removeQueries explicitly pehle karo.
+    // Pehle sirf invalidateCatalogQueries() call hota tha.
+    // Ab removeQueries pehle ensure karta hai ke har auth state change pe
+    // stale data clear ho aur fresh fetch ho.
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       window.setTimeout(() => {
         void (async () => {
@@ -329,7 +331,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             if (nextSession?.user) {
               void syncUserData(nextSession.user);
-              // ✅ Invalidate catalog on every auth state change
+              // ✅ removeQueries first, then invalidate
+              if (_queryClient) {
+                _queryClient.removeQueries({ queryKey: ["cards"] });
+                _queryClient.removeQueries({ queryKey: ["templates"] });
+                _queryClient.removeQueries({ queryKey: ["categories"] });
+                _queryClient.removeQueries({ queryKey: ["navCategories"] });
+                _queryClient.removeQueries({
+                  predicate: (q) => q.queryKey[0] === "templates",
+                });
+              }
               invalidateCatalogQueries();
             } else {
               setProfile(null);
@@ -354,7 +365,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           _queryClient.removeQueries({ queryKey: ["cards"] });
           _queryClient.removeQueries({ queryKey: ["templates"] });
           _queryClient.removeQueries({ queryKey: ["categories"] });
-          _queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "templates" });
+          _queryClient.removeQueries({
+            predicate: (q) => q.queryKey[0] === "templates",
+          });
         }
       }
     };
