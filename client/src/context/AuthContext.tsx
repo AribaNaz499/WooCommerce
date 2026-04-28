@@ -142,6 +142,8 @@ function computePlan(profile: UserProfileRow | null): PlanCode {
   return "free";
 }
 
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -167,6 +169,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .maybeSingle();
     if (error) throw error;
     setProfile((data as any) ?? null);
+    return (data as any) ?? null;
   };
 
   const upsertUser = async (authUser: User) => {
@@ -197,12 +200,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const syncUserData = async (authUser: User) => {
-    const [upsertResult, profileResult] = await Promise.allSettled([
-      upsertUser(authUser),
-      fetchProfile(authUser.id),
-    ]);
-    if (upsertResult.status === "rejected") console.error("Upsert user error:", upsertResult.reason);
-    if (profileResult.status === "rejected") console.error("Fetch profile error:", profileResult.reason);
+    try {
+      await upsertUser(authUser);
+
+      // Production can briefly read before the upserted row is visible.
+      // Retry a couple of times so the UI does not fall back to "guest".
+      let nextProfile = await fetchProfile(authUser.id);
+      if (!nextProfile) {
+        await delay(250);
+        nextProfile = await fetchProfile(authUser.id);
+      }
+      if (!nextProfile) {
+        await delay(500);
+        await fetchProfile(authUser.id);
+      }
+    } catch (err) {
+      console.error("syncUserData error:", err);
+    }
   };
 
   const completeAuthCallbackFromUrl = async () => {
