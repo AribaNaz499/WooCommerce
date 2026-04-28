@@ -13,40 +13,6 @@ const isSafari = () => {
 // to avoid auth cookie issues across domains
 const preferPublicCatalogOnly = () => isSafari();
 
-const withTimeout = async <T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string
-): Promise<T> => {
-  let timeoutId: number | undefined;
-
-  const timeout = new Promise<T>((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(new Error(`${label} timed out after ${ms}ms`));
-    }, ms);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
-};
-
-const settleCatalogQuery = async <T>(
-  factory: () => Promise<T>,
-  label: string,
-  timeoutMs = 4500
-): Promise<PromiseSettledResult<T>> => {
-  try {
-    const value = await withTimeout(factory(), timeoutMs, label);
-    return { status: "fulfilled", value };
-  } catch (reason) {
-    console.warn(`[Catalog] ${label} failed`, reason);
-    return { status: "rejected", reason };
-  }
-};
-
 // ============ CACHE LAYER ============
 // Single source of truth: memory cache only (no localStorage for catalog data)
 // localStorage caused BFCache + stale data issues on Vercel/Safari
@@ -360,16 +326,19 @@ const queryCardsCatalogRowsForClient = async (
 };
 
 const fetchCardsCatalogRows = async (opts?: { subCategory?: string | null }) => {
-  const useTimeouts = preferPublicCatalogOnly();
-  const [publicResult, authResult] = useTimeouts
-    ? await Promise.all([
-        settleCatalogQuery(() => queryCardsCatalogRowsForClient(supabasePublic, opts), "cards.public"),
-        settleCatalogQuery(() => queryCardsCatalogRowsForClient(supabase, opts), "cards.auth"),
-      ])
-    : await Promise.allSettled([
-        queryCardsCatalogRowsForClient(supabasePublic, opts),
-        queryCardsCatalogRowsForClient(supabase, opts),
-      ]);
+  if (preferPublicCatalogOnly()) {
+    try {
+      const publicRows = await queryCardsCatalogRowsForClient(supabasePublic, opts);
+      if (publicRows.length > 0) return publicRows;
+    } catch (publicError: any) {
+      console.warn("[Cards] Safari public-only fetch failed", publicError);
+    }
+  }
+
+  const [publicResult, authResult] = await Promise.allSettled([
+    queryCardsCatalogRowsForClient(supabasePublic, opts),
+    queryCardsCatalogRowsForClient(supabase, opts),
+  ]);
 
   const publicRows = publicResult.status === "fulfilled" ? publicResult.value : [];
   const authRows = authResult.status === "fulfilled" ? authResult.value : [];
@@ -457,22 +426,23 @@ export const fetchCardById = async (id: string) => {
 };
 
 export const fetchAllCategoriesFromDB = async () => {
-  const useTimeouts = preferPublicCatalogOnly();
-  const [publicResult, authResult] = useTimeouts
-    ? await Promise.all([
-        settleCatalogQuery(
-          () => supabasePublic.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
-          "categories.full.public"
-        ),
-        settleCatalogQuery(
-          () => supabase.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
-          "categories.full.auth"
-        ),
-      ])
-    : await Promise.allSettled([
-        supabasePublic.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
-        supabase.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
-      ]);
+  if (preferPublicCatalogOnly()) {
+    const publicOnly = await supabasePublic
+      .from("categories")
+      .select("id,name,image_base64,subcategories,sub_subcategories,created_at");
+
+    if (!publicOnly.error) {
+      const rows = normalizeCategoryRows(publicOnly.data ?? []);
+      return rows.slice().sort((a: any, b: any) =>
+        String(a?.name ?? "").localeCompare(String(b?.name ?? ""), undefined, { sensitivity: "base", numeric: true })
+      );
+    }
+  }
+
+  const [publicResult, authResult] = await Promise.allSettled([
+    supabasePublic.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
+    supabase.from("categories").select("id,name,image_base64,subcategories,sub_subcategories,created_at"),
+  ]);
 
   const publicData = publicResult.status === "fulfilled" && !publicResult.value.error ? publicResult.value.data ?? [] : [];
   const authData = authResult.status === "fulfilled" && !authResult.value.error ? authResult.value.data ?? [] : [];
@@ -494,22 +464,23 @@ export const fetchAllCategoryNamesFromDB = async () => {
   if (cached) return cached;
 
   try {
-    const useTimeouts = preferPublicCatalogOnly();
-    const [publicResult, authResult] = useTimeouts
-      ? await Promise.all([
-          settleCatalogQuery(
-            () => supabasePublic.from("categories").select("id,name").order("name", { ascending: true }),
-            "categories.names.public"
-          ),
-          settleCatalogQuery(
-            () => supabase.from("categories").select("id,name").order("name", { ascending: true }),
-            "categories.names.auth"
-          ),
-        ])
-      : await Promise.allSettled([
-          supabasePublic.from("categories").select("id,name").order("name", { ascending: true }),
-          supabase.from("categories").select("id,name").order("name", { ascending: true }),
-        ]);
+    if (preferPublicCatalogOnly()) {
+      const publicOnly = await supabasePublic
+        .from("categories")
+        .select("id,name")
+        .order("name", { ascending: true });
+
+      if (!publicOnly.error) {
+        const rows = publicOnly.data ?? [];
+        setCache('categories', rows);
+        return rows;
+      }
+    }
+
+    const [publicResult, authResult] = await Promise.allSettled([
+      supabasePublic.from("categories").select("id,name").order("name", { ascending: true }),
+      supabase.from("categories").select("id,name").order("name", { ascending: true }),
+    ]);
 
     const publicData = publicResult.status === "fulfilled" && !publicResult.value.error ? publicResult.value.data ?? [] : [];
     const authData = authResult.status === "fulfilled" && !authResult.value.error ? authResult.value.data ?? [] : [];
@@ -524,22 +495,19 @@ export const fetchAllCategoryNamesFromDB = async () => {
 };
 
 export const fetchCardsCategoryMeta = async () => {
-  const useTimeouts = preferPublicCatalogOnly();
-  const [publicResult, authResult] = useTimeouts
-    ? await Promise.all([
-        settleCatalogQuery(
-          () => supabasePublic.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
-          "categories.cardsMeta.public"
-        ),
-        settleCatalogQuery(
-          () => supabase.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
-          "categories.cardsMeta.auth"
-        ),
-      ])
-    : await Promise.allSettled([
-        supabasePublic.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
-        supabase.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
-      ]);
+  if (preferPublicCatalogOnly()) {
+    const publicOnly = await supabasePublic
+      .from("categories")
+      .select("id,name,subcategories,sub_subcategories")
+      .eq("name", "Cards")
+      .maybeSingle();
+    if (!publicOnly.error && publicOnly.data) return publicOnly.data;
+  }
+
+  const [publicResult, authResult] = await Promise.allSettled([
+    supabasePublic.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
+    supabase.from("categories").select("id,name,subcategories,sub_subcategories").eq("name", "Cards").maybeSingle(),
+  ]);
 
   const publicData = publicResult.status === "fulfilled" && !publicResult.value.error ? publicResult.value.data ?? null : null;
   const authData = authResult.status === "fulfilled" && !authResult.value.error ? authResult.value.data ?? null : null;
@@ -642,16 +610,23 @@ export const fetchAllTempletDesigns = async (): Promise<any[]> => {
       return fallback.data ?? [];
     };
 
-    const useTimeouts = preferPublicCatalogOnly();
-    const [publicResult, authResult] = useTimeouts
-      ? await Promise.all([
-          settleCatalogQuery(() => queryForClient(supabasePublic), "templates.public"),
-          settleCatalogQuery(() => queryForClient(supabase), "templates.auth"),
-        ])
-      : await Promise.allSettled([
-          queryForClient(supabasePublic),
-          queryForClient(supabase),
-        ]);
+    if (preferPublicCatalogOnly()) {
+      try {
+        const publicData = await queryForClient(supabasePublic);
+        if (publicData.length > 0) {
+          setCache('templates', publicData);
+          finishTiming("fetchAllTempletDesigns", startedAt, { count: publicData.length, cached: false });
+          return publicData;
+        }
+      } catch (e) {
+        console.warn("Templates Safari public-only fetch failed", e);
+      }
+    }
+
+    const [publicResult, authResult] = await Promise.allSettled([
+      queryForClient(supabasePublic),
+      queryForClient(supabase),
+    ]);
 
     const publicData = publicResult.status === "fulfilled" ? publicResult.value : [];
     const authData = authResult.status === "fulfilled" ? authResult.value : [];
@@ -710,16 +685,22 @@ export const fetchTempletDesignsByCategory = async (opts?: {
     subSubCategory: String(opts?.subSubCategory ?? "").trim() || null,
   });
 
-  const useTimeouts = preferPublicCatalogOnly();
-  const [publicResult, authResult] = useTimeouts
-    ? await Promise.all([
-        settleCatalogQuery(() => queryTemplateRowsForClient(supabasePublic, opts), "templates.filtered.public"),
-        settleCatalogQuery(() => queryTemplateRowsForClient(supabase, opts), "templates.filtered.auth"),
-      ])
-    : await Promise.allSettled([
-        queryTemplateRowsForClient(supabasePublic, opts),
-        queryTemplateRowsForClient(supabase, opts),
-      ]);
+  if (preferPublicCatalogOnly()) {
+    try {
+      const publicData = await queryTemplateRowsForClient(supabasePublic, opts);
+      if (publicData.length > 0) {
+        finishTiming("fetchTempletDesignsByCategory", startedAt, { count: publicData.length });
+        return publicData;
+      }
+    } catch (e) {
+      console.warn("Templates filtered Safari public-only fetch failed", e);
+    }
+  }
+
+  const [publicResult, authResult] = await Promise.allSettled([
+    queryTemplateRowsForClient(supabasePublic, opts),
+    queryTemplateRowsForClient(supabase, opts),
+  ]);
 
   const publicData = publicResult.status === "fulfilled" ? publicResult.value : [];
   const authData = authResult.status === "fulfilled" ? authResult.value : [];
