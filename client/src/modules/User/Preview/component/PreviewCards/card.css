@@ -1,0 +1,122 @@
+/* Book */
+.book {
+  width: 500px;
+  height: 700px;
+  position: relative;
+  transition: transform 0.5s;
+}
+
+.book-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+.paper {
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  perspective: 1500px;
+}
+
+.front {
+  backface-visibility: hidden;
+  border-radius: 14px;
+}
+
+/* Disable ALL transforms for capture */
+.capture-no-transform {
+  transform: none !important;
+  perspective: none !important;
+  backface-visibility: visible !important;
+}
+
+
+.front,
+.back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+  transform-origin: left;
+  transition: transform 0.5s;
+  border-radius: 15px;
+}
+
+.front {
+  z-index: 1;
+}
+.back {
+  z-index: 0;
+}
+
+.front-content,
+.back-content {
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid #dbdbdb;
+}
+
+.back-content {
+  transform: rotateY(180deg);
+}
+
+/* Paper Flipped */
+.flipped .front,
+.flipped .back {
+  transform: rotateY(-180deg);
+}
+
+/* Paper Z-index */
+#p1 {
+  z-index: 3;
+}
+#p2 {
+  z-index: 2;
+}
+#p3 {
+  z-index: 1;
+}
+
+/* Tablets (≤ 768px) */
+@media (max-width: 768px) {
+  .book {
+    width: 500px;
+    height: 700px;
+  }
+}
+
+/* Mobile (≤ 480px) — single slide carousel */
+@media (max-width: 480px) {
+  .front-content,
+  .back-content {
+    width: 80%;
+    height: 90%;
+  }
+
+  .book {
+    display: none;
+  } /* hide 3D book on mobile */
+  .mobile-slide {
+    border-radius: 15px;
+    border: 1px solid #dbdbdb;
+    overflow: hidden; /* show only active slide */
+    /* subtle transition for content swap */
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .book-container {
+    width: 100%;
+  }
+}
