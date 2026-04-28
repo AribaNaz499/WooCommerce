@@ -252,7 +252,6 @@ const ViewAllCard = () => {
     queryKey: viewingSpecificNonCardCategory
       ? ["templates", "view-all", routeCategoryName, routeSubCategory, routeSubSubCategory]
       : ["templates"],
-    enabled: !viewingCardsCategory,
     queryFn: () =>
       viewingSpecificNonCardCategory
         ? fetchTempletDesignsByCategory({
@@ -390,19 +389,10 @@ const ViewAllCard = () => {
 
   const loading = catLoading && categories.length === 0;
 
-  const productsPending = (() => {
-    if (viewingCardsCategory) {
-      return filteredItems.length === 0 && cardsLoading && cards.length === 0;
-    }
-    if (viewingSpecificNonCardCategory) {
-      return filteredItems.length === 0 && templatesLoading && templates.length === 0;
-    }
-    return (
-      filteredItems.length === 0 &&
-      ((cardsLoading && cards.length === 0) ||
-        (templatesLoading && templates.length === 0))
-    );
-  })();
+  const productsPending =
+    filteredItems.length === 0 &&
+    ((cardsLoading && cards.length === 0) ||
+      (templatesLoading && templates.length === 0));
 
   const countLabel = productsPending ? "..." : String(filteredItems.length);
   const filteredCardCount = filteredItems.filter((item) => item.__type === "card").length;
