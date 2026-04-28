@@ -13,11 +13,11 @@ const isSafari = () => {
 // to avoid auth cookie issues across domains
 const preferPublicCatalogOnly = () => isSafari();
 
-const withTimeout = async <T>(
+async function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string
-): Promise<T> => {
+): Promise<T> {
   let timeoutId: number | undefined;
 
   const timeout = new Promise<T>((_, reject) => {
@@ -31,13 +31,13 @@ const withTimeout = async <T>(
   } finally {
     if (timeoutId) window.clearTimeout(timeoutId);
   }
-};
+}
 
-const settleCatalogQuery = async <T>(
+async function settleCatalogQuery<T>(
   factory: () => Promise<T>,
   label: string,
   timeoutMs = 4500
-): Promise<PromiseSettledResult<T>> => {
+): Promise<PromiseSettledResult<T>> {
   try {
     const value = await withTimeout(factory(), timeoutMs, label);
     return { status: "fulfilled", value };
@@ -45,7 +45,7 @@ const settleCatalogQuery = async <T>(
     console.warn(`[Catalog] ${label} failed`, reason);
     return { status: "rejected", reason };
   }
-};
+}
 
 // ============ CACHE LAYER ============
 // Single source of truth: memory cache only (no localStorage for catalog data)
