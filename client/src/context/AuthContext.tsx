@@ -31,31 +31,17 @@ export const setAuthQueryClient = (qc: QueryClient) => {
 // not just get marked stale. This fixes the "data missing after sign-in" bug
 // on Vercel where staleTime kept preventing re-fetches.
 const invalidateCatalogQueries = () => {
+  // Always clear memory cache first so next fetch goes to network
+  clearCatalogCaches();
+
   if (!_queryClient) {
     console.warn("[AuthContext] queryClient not registered - call setAuthQueryClient() in App.tsx");
     return;
   }
 
-  const isSafariRefresh =
-    typeof window !== "undefined" && isSafariBrowser();
-
-  if (!isSafariRefresh) {
-    // Non-Safari: force next reads to go fully fresh.
-    clearCatalogCaches();
-  }
-
   console.log("[AuthContext] Invalidating + refetching catalog queries after auth change");
 
-  if (isSafariRefresh) {
-    // Safari: keep current catalog visible, refresh in background.
-    _queryClient.invalidateQueries({ queryKey: ["cards"], refetchType: "active" });
-    _queryClient.invalidateQueries({ queryKey: ["categories"], refetchType: "active" });
-    _queryClient.invalidateQueries({ queryKey: ["navCategories"], refetchType: "active" });
-    _queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "templates", refetchType: "active" });
-    return;
-  }
-
-  // Other browsers: remove cached query data entirely, forcing fresh fetch on next access
+  // Remove cached query data entirely, forcing fresh fetch on next access
   _queryClient.removeQueries({ queryKey: ["cards"] });
   _queryClient.removeQueries({ queryKey: ["templates"] });
   _queryClient.removeQueries({ queryKey: ["categories"] });
