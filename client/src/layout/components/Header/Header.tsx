@@ -79,7 +79,7 @@ export default function Header(props: Props) {
   const { window } = props;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, signOut } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const { cart } = useCartStore();
   const location = useLocation()
 
@@ -172,6 +172,19 @@ export default function Header(props: Props) {
 
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const { listRef, canLeft, canRight, scrollByAmount } = useHScrollArrows();
+  const accountReady = Boolean(user || profile);
+  const avatarSrc =
+    user?.user_metadata?.avatar_url ||
+    profile?.profileUrl ||
+    undefined;
+  const avatarAlt =
+    user?.user_metadata?.name ||
+    profile?.full_name ||
+    user?.email ||
+    profile?.email ||
+    "Account";
+  const avatarInitial =
+    avatarAlt?.trim().charAt(0).toUpperCase() || "A";
 
 
   const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -302,11 +315,11 @@ export default function Header(props: Props) {
                 </Box>
 
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                  {user ? (
+                  {accountReady ? (
                     <>
                       <IconButton onClick={handleOpenMenu}>
-                        <Avatar sx={{ bgcolor: "orange" }}>
-                          {user.email?.charAt(0).toUpperCase()}
+                        <Avatar sx={{ bgcolor: "orange" }} src={avatarSrc} alt={avatarAlt}>
+                          {!avatarSrc ? avatarInitial : null}
                         </Avatar>
                       </IconButton>
 
@@ -348,7 +361,7 @@ export default function Header(props: Props) {
                         </MenuItem>
                       </Menu>
                     </>
-                  ) : (
+                  ) : loading ? null : (
                     <IconButton
                       sx={iconStyle}
                       onClick={openSignIn}
@@ -499,7 +512,7 @@ export default function Header(props: Props) {
                   {/* reminder drawer  */}
 
                   <RemindersDrawer />
-                  {user ? (
+                  {accountReady ? (
                     <>
                       <IconButton onClick={handleOpenMenu}>
                         <Avatar
@@ -509,15 +522,10 @@ export default function Header(props: Props) {
                             height: 40,
                             border: "2px solid orange",
                           }}
-                          src={user.user_metadata?.avatar_url || undefined}
-                          alt={user.user_metadata?.name || user.email}
+                          src={avatarSrc}
+                          alt={avatarAlt}
                         >
-                          {/* Fallback letter if no image */}
-                          {!user.user_metadata?.avatar_url &&
-                            (user.user_metadata?.name
-                              ?.charAt(0)
-                              .toUpperCase() ||
-                              user.email?.charAt(0).toUpperCase())}
+                          {!avatarSrc ? avatarInitial : null}
                         </Avatar>
                       </IconButton>
 
@@ -570,7 +578,7 @@ export default function Header(props: Props) {
                         </MenuItem>
                       </Menu>
                     </>
-                  ) : (
+                  ) : loading ? null : (
                     <IconButton
                       sx={iconStyle}
                       onClick={openSignIn}
