@@ -115,6 +115,17 @@ function getOAuthAvatar(user: User | null): string {
   );
 }
 
+function buildOptimisticProfile(authUser: User): UserProfileRow {
+  const meta: any = authUser.user_metadata ?? {};
+  return {
+    auth_id: authUser.id,
+    full_name: meta?.full_name || meta?.name || authUser.email || "",
+    email: authUser.email ?? null,
+    phone: meta?.phone || null,
+    profileUrl: getOAuthAvatar(authUser) || null,
+  };
+}
+
 function computePremiumActive(profile: UserProfileRow | null): boolean {
   if (!profile?.isPremium) return false;
   const expiresAt = profile.premium_expires_at;
@@ -201,6 +212,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const syncUserData = async (authUser: User) => {
     try {
+      setProfile((current) => current ?? buildOptimisticProfile(authUser));
       await upsertUser(authUser);
 
       // Production can briefly read before the upserted row is visible.
@@ -291,6 +303,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
 
         if (data.session?.user?.id) {
+          setProfile((current) => current ?? buildOptimisticProfile(data.session.user));
           void syncUserData(data.session.user);
           // ✅ Always invalidate on session restore so data is fresh
           invalidateCatalogQueries();
@@ -314,6 +327,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUser(nextSession?.user ?? null);
 
             if (nextSession?.user) {
+              setProfile((current) => current ?? buildOptimisticProfile(nextSession.user));
               void syncUserData(nextSession.user);
               // ✅ Invalidate catalog on every auth state change
               invalidateCatalogQueries();
@@ -395,6 +409,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(verifiedUser);
 
     if (verifiedUser?.id) {
+      setProfile((current) => current ?? buildOptimisticProfile(verifiedUser));
       void syncUserData(verifiedUser);
       // ✅ Ensure catalog is cleared + re-fetched after sign-in
       invalidateCatalogQueries();
