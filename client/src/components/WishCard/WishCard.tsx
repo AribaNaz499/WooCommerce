@@ -733,9 +733,7 @@ const WishCard = (props: wishCardType) => {
           />
           {slides.map((e, index) => {
             const isActive = index === activeIndex;
-            const showToolbar = adminEditor
-              ? isActive
-              : isActive && (index === 1 || index === 2);
+            const showToolbar = isActive;
             const toolbarSx = isCompact
               ? {
                 position: "absolute",

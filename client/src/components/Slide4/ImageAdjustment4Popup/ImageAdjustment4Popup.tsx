@@ -1,8 +1,10 @@
-import { Check, Delete, DrawOutlined, Flare, KeyboardArrowDown, KeyboardArrowUp } from "@mui/icons-material";
+import { Check, Crop, Delete, DrawOutlined, Flare, KeyboardArrowDown, KeyboardArrowUp } from "@mui/icons-material";
 import { Box, IconButton, useMediaQuery } from "@mui/material";
+import { useState } from "react";
 import { COLORS } from "../../../constant/color";
 import { convertToRealisticSketch } from "../../../source/SketchEffect";
 import { useSlide4 } from "../../../context/Slide4Context";
+import ImageCropModal from "../../../components/ImageCropModal/ImageCropModal";
 
 interface ImageAdjustment4PopupProps {
     togglePopup?: any,
@@ -14,6 +16,8 @@ interface ImageAdjustment4PopupProps {
 const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
     const { onClose, isAdminEditor } = props
     const isMobile = useMediaQuery("(max-width:600px)");
+    const [showCropModal, setShowCropModal] = useState(false);
+    const [selectedImageForCrop, setSelectedImageForCrop] = useState<string | null>(null);
 
     const { setImageFilter4, imageFilter4, setDraggableImages4, selectedImg4, setImages4, setSelectedImage4, setActiveFilterImageId4, draggableImages4 } = useSlide4()
 
@@ -74,9 +78,49 @@ const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
         );
     };
 
+    const openCropModal = () => {
+        if (selectedImg4.length === 0) return;
+        const id = selectedImg4[selectedImg4.length - 1];
+        const target = draggableImages4.find(img => img.id === id);
+        if (target?.src) {
+            setSelectedImageForCrop(target.src);
+            setShowCropModal(true);
+        }
+    };
+
+    const handleCropComplete = (croppedImageUrl: string) => {
+        if (selectedImg4.length === 0) return;
+        const id = selectedImg4[selectedImg4.length - 1];
+
+        setDraggableImages4(prev =>
+            prev.map(img =>
+                img.id === id
+                    ? {
+                        ...img,
+                        src: croppedImageUrl,
+                        cropHistory: {
+                            originalSrc: img.src,
+                            croppedSrc: croppedImageUrl,
+                            timestamp: Date.now()
+                        }
+                    }
+                    : img
+            )
+        );
+
+        setImages4(prev =>
+            prev.map(img =>
+                img.id === id
+                    ? { ...img, src: croppedImageUrl }
+                    : img
+            )
+        );
+    };
+
 
 
     return (
+        <>
         <Box
             sx={{
                 position: isMobile ? "fixed" : "absolute",
@@ -129,31 +173,39 @@ const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
                         },
                     }}
                 >
-
-                    {/* <IconButton sx={editingButtonStyle}><Crop fontSize="large" /> Crop</IconButton> */}
-
-                    {/* <IconButton sx={editingButtonStyle}><Adjust fontSize="large" /> Adjust</IconButton> */}
+                    <IconButton
+                        sx={editingButtonStyle}
+                        onClick={openCropModal}
+                        disabled={selectedImg4.length === 0}
+                        title={selectedImg4.length === 0 ? "Select an image to crop" : "Crop Image"}
+                    >
+                        <Crop fontSize="large" />
+                        Crop
+                    </IconButton>
 
                     <IconButton
                         sx={editingButtonStyle}
                         onClick={() => {
                             const lastSelected = selectedImg4[selectedImg4.length - 1];
-                            setActiveFilterImageId4(lastSelected);
-                            setImageFilter4(!imageFilter4);
+                            if (lastSelected) {
+                                setActiveFilterImageId4(lastSelected);
+                                setImageFilter4(!imageFilter4);
+                            }
                         }}
+                        disabled={selectedImg4.length === 0}
                     >
                         <Flare fontSize="large" />
                         Effect
                     </IconButton>
 
                     {!isAdminEditor && (
-                        <IconButton sx={editingButtonStyle} onClick={bringToFront}>
+                        <IconButton sx={editingButtonStyle} onClick={bringToFront} disabled={selectedImg4.length === 0}>
                             <KeyboardArrowUp fontSize="large" /> Front
                         </IconButton>
                     )}
 
                     {!isAdminEditor && (
-                        <IconButton sx={editingButtonStyle} onClick={sendToBack}>
+                        <IconButton sx={editingButtonStyle} onClick={sendToBack} disabled={selectedImg4.length === 0}>
                             <KeyboardArrowDown fontSize="large" /> Back
                         </IconButton>
                     )}
@@ -161,6 +213,7 @@ const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
                     <IconButton
                         sx={editingButtonStyle}
                         onClick={applySketch}
+                        disabled={selectedImg4.length === 0}
                     >
                         <DrawOutlined fontSize="large" />
                         Sketch
@@ -170,6 +223,7 @@ const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
                     <IconButton
                         sx={editingButtonStyle}
                         onClick={deleteSelectedImages}
+                        disabled={selectedImg4.length === 0}
                     >
                         <Delete />
                         Delete
@@ -203,6 +257,22 @@ const ImageAdjustment4Popup = (props: ImageAdjustment4PopupProps) => {
             </Box>
 
         </Box>
+        {showCropModal && selectedImageForCrop && (
+            <ImageCropModal
+                open={showCropModal}
+                imageSrc={selectedImageForCrop}
+                onClose={() => {
+                    setShowCropModal(false);
+                    setSelectedImageForCrop(null);
+                }}
+                onApply={(croppedImageSrc) => {
+                    handleCropComplete(croppedImageSrc);
+                    setShowCropModal(false);
+                    setSelectedImageForCrop(null);
+                }}
+            />
+        )}
+        </>
     );
 };
 
