@@ -132,6 +132,11 @@ const AuthRedirector = () => {
     );
     log("E2 | signal:", callbackSignal, "| freshPending:", isFreshPending, "| ageMs:", pendingAgeMs);
 
+    if (loading && (callbackSignal || hasExplicitRedirectParam || isFreshPending)) {
+      log("E2 | waiting for auth/session restore before touching pending redirect");
+      return;
+    }
+
     if (!callbackSignal && !hasExplicitRedirectParam) {
       clearPendingAuthRedirect();
       log("E2 | plain home visit -> cleared pending and bail");

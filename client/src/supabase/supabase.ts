@@ -9,36 +9,61 @@ export const supabaseConfigError =
 
 const memorySessionStore = new Map<string, string>();
 
+const readBrowserStorage = (key: string) => {
+  if (typeof window === "undefined") return memorySessionStore.get(key) ?? null;
+  try {
+    const localValue = window.localStorage.getItem(key);
+    if (localValue != null) return localValue;
+  } catch {}
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return memorySessionStore.get(key) ?? null;
+  }
+};
+
+const writeBrowserStorage = (key: string, value: string) => {
+  if (typeof window === "undefined") {
+    memorySessionStore.set(key, value);
+    return;
+  }
+  let wrote = false;
+  try {
+    window.localStorage.setItem(key, value);
+    wrote = true;
+  } catch {}
+  try {
+    window.sessionStorage.setItem(key, value);
+    wrote = true;
+  } catch {}
+  if (!wrote) {
+    memorySessionStore.set(key, value);
+  }
+};
+
+const removeBrowserStorage = (key: string) => {
+  if (typeof window === "undefined") {
+    memorySessionStore.delete(key);
+    return;
+  }
+  try {
+    window.localStorage.removeItem(key);
+  } catch {}
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {}
+  memorySessionStore.delete(key);
+};
+
 const createSessionStorageAdapter = () => ({
   getItem: (key: string) => {
-    if (typeof window === "undefined") return memorySessionStore.get(key) ?? null;
-    try {
-      return window.sessionStorage.getItem(key);
-    } catch {
-      return memorySessionStore.get(key) ?? null;
-    }
+    return readBrowserStorage(key);
   },
   setItem: (key: string, value: string) => {
-    if (typeof window === "undefined") {
-      memorySessionStore.set(key, value);
-      return;
-    }
-    try {
-      window.sessionStorage.setItem(key, value);
-    } catch {
-      memorySessionStore.set(key, value);
-    }
+    writeBrowserStorage(key, value);
   },
   removeItem: (key: string) => {
-    if (typeof window === "undefined") {
-      memorySessionStore.delete(key);
-      return;
-    }
-    try {
-      window.sessionStorage.removeItem(key);
-    } catch {
-      memorySessionStore.delete(key);
-    }
+    removeBrowserStorage(key);
   },
 });
 
